@@ -68,7 +68,7 @@ def get_task_episodes(metadata: LeRobotDatasetMetadata, task_name: str) -> list[
         return selected
 
     target_task_index = int(metadata.tasks.loc[task_name, "task_index"])
-    metadata.pull_from_repo(allow_patterns="data/")
+    metadata._pull_from_repo(allow_patterns="data/")
 
     selected = []
     for parquet_path in sorted((metadata.root / "data").glob("chunk-*/*.parquet")):
@@ -131,7 +131,7 @@ def main() -> None:
         observation_width=256,
     )
 
-    run_name = datetime.now().strftime("act_libero_goal_plate_%Y%m%d_%H%M%S")
+    run_name = "act_libero_goal_plate"
     output_dir = Path("vla/3_imitation_learning/3_1_act/outputs") / run_name
 
     cfg = TrainPipelineConfig(
@@ -140,14 +140,14 @@ def main() -> None:
         policy=policy_cfg,
         output_dir=output_dir,
         batch_size=BATCH_SIZE,
-        num_workers=2,
-        steps=100000,
-        eval_freq=eval_freq,
+        num_workers=8,
+        steps=1000,
+        eval_freq=500,
         # 每次评估都存一份 checkpoint，这样曲线上任何一个点都能回去复现。
-        save_freq=eval_freq,
+        save_freq=1000,
         log_freq=5,
         save_checkpoint=True,
-        wandb=WandBConfig(enable=True, project="act-libero"),
+        wandb=WandBConfig(enable=False, project="act-libero"),
         eval=EvalConfig(
             n_episodes=EVAL_EPISODES,
             batch_size=1,
