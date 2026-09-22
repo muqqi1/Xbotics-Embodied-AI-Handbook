@@ -28,6 +28,7 @@ build/
 *.ckpt
 *.safetensors
 checkpoints/
+.ipynb_checkpoints/
 datasets/
 episode_data/
 code/**/outputs/
