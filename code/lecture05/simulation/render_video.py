@@ -51,8 +51,11 @@ def main() -> None:
         print("  2) 无显示时尝试软件渲染：MUJOCO_GL=egl .venv/bin/python render_video.py")
         sys.exit(1)
 
-    # 设置 free camera 视角（斜俯视搬运路径）
-    cam = renderer.scene.camera
+    # 设置 free camera 视角（斜俯视搬运路径）。
+    # 注意：新版 mujoco 里 renderer.scene.camera 是 mjvGLCamera 的元组（只有
+    # pos/up/forward/frustum_*，没有 type/lookat/distance/azimuth/elevation），
+    # 不能直接改视角。要另建 mjvCamera，并在 update_scene 时显式传入。
+    cam = mujoco.MjvCamera()
     cam.type = mujoco.mjtCamera.mjCAMERA_FREE
     cam.lookat[:] = [0.27, 0.03, 0.06]
     cam.distance = 1.0
@@ -67,7 +70,7 @@ def main() -> None:
     counter = [0]
 
     def frame_callback():
-        renderer.update_scene(data, camera=-1)
+        renderer.update_scene(data, camera=cam)
         rgb = renderer.render()
         save_ppm(frames_dir / f"frame_{counter[0]:05d}.ppm", rgb)
         counter[0] += 1
