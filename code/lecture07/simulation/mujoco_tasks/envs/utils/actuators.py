@@ -11,6 +11,10 @@ from .collision import ROBOT_PREFIX
 ARM_ACTUATOR_KP = 600.0
 GRIPPER_ACTUATOR_KP = 100.0
 JOINT_ACTUATOR_FRC_LIMIT = 1.0
+# 夹爪力矩上限单独压低：手臂要举臂+负载需要 1 N·m，但夹爪顶着 0.08 kg 方块
+# 捏到底时若力矩过大，位置伺服与接触约束互相顶 → 求解器振荡 → 方块被弹飞（Nan/Inf QACC）。
+# 对齐 kit 模型 so101.py 的思路：夹爪力矩远低于手臂。
+GRIPPER_ACTUATOR_FRC_LIMIT = 0.30
 
 
 def configure_robot_actuators(model: mujoco.MjModel) -> None:
@@ -20,7 +24,11 @@ def configure_robot_actuators(model: mujoco.MjModel) -> None:
         joint_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, joint_id) or ""
         if not joint_name.startswith(ROBOT_PREFIX):
             continue
-        limit = JOINT_ACTUATOR_FRC_LIMIT
+        limit = (
+            GRIPPER_ACTUATOR_FRC_LIMIT
+            if joint_name == f"{ROBOT_PREFIX}gripper"
+            else JOINT_ACTUATOR_FRC_LIMIT
+        )
         model.jnt_actfrcrange[joint_id] = [-limit, limit]
         model.jnt_actfrclimited[joint_id] = 1
 

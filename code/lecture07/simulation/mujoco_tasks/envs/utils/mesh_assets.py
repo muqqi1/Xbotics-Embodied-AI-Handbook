@@ -8,14 +8,25 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import mujoco
-import so101_sim
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-# SO-101 的 URDF 与网格来自 so101_sim 包（独立仓 Xbotics-SO101-Sim，由 uv sync 装）。
-# 从包的安装位置取，而不是拼相对路径 —— 本仓不再放它的副本。
-URDF_PATH = Path(so101_sim.__file__).resolve().parent / "robots" / "so101_base" / "so101.urdf"
+# SO-101 的 URDF 与网格来自 so101_sim 包（独立仓 Xbotics-SO101-Sim）。
+# so101_sim 在 ef9c756 把几何收敛成唯一一份 kit_v1_so101.urdf、并改掉 mesh 命名与
+# 夹爪碰撞拆解（旧 so101_base 的 2 个碰撞体 → kit_v1 的 26 个分解碰撞体）。
+# 默认用 kit_v1（26 碰撞体，夹爪接触更稳，与 vla/rl 同一套几何）。
+# 旧 so101_base 几何已随本讲 vendored 到 simulation/assets/so101_base/（gitignored，
+# 需按 README「MuJoCo 资产场景」拉取），设 USE_KIT_V1=False 可切回旧几何。
+LECTURE07_ROOT = Path(__file__).resolve().parents[4]
+USE_KIT_V1 = True
+
+if USE_KIT_V1:
+    import so101_sim  # noqa: F401
+
+    URDF_PATH = Path(so101_sim.__file__).resolve().parent / "robots" / "kit_assets" / "kit_v1_so101.urdf"
+else:
+    URDF_PATH = LECTURE07_ROOT / "simulation" / "assets" / "so101_base" / "so101.urdf"
 
 MESH_DIR = URDF_PATH.parent
 

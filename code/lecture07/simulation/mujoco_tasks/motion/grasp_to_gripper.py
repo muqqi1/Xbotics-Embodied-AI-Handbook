@@ -34,6 +34,36 @@ GRIPPER_JAW_GEOM_NAMES = (
 )
 
 
+def _jaw_geom_ids(model: mujoco.MjModel) -> tuple[list[int], list[int]]:
+    """Return (fixed_ids, moving_ids) of gripper jaw collision geoms.
+
+    Old ``so101`` model uses two named geoms; kit_v1 uses many ``_erode``/``Wrist_part``/
+    ``Moving_part`` collision meshes, so we collect them all by body + mesh marker.
+    """
+
+    from ..envs.utils.collision import GRIPPER_JAW_COLLISION_GEOM_NAMES, ROBOT_PREFIX, USE_KIT_V1, is_robot_collision_only_mesh
+
+    if not USE_KIT_V1:
+        return (
+            [model.geom(GRIPPER_JAW_GEOM_NAMES[0]).id],
+            [model.geom(GRIPPER_JAW_GEOM_NAMES[1]).id],
+        )
+
+    fixed: list[int] = []
+    moving: list[int] = []
+    for gid in range(model.ngeom):
+        body = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, model.geom_bodyid[gid]) or ""
+        mid = model.geom_dataid[gid]
+        mname = (mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_MESH, mid) or "") if mid >= 0 else ""
+        if not is_robot_collision_only_mesh(mname):
+            continue
+        if body == f"{ROBOT_PREFIX}gripper_link":
+            fixed.append(gid)
+        elif body == f"{ROBOT_PREFIX}moving_jaw_so101_v1_link":
+            moving.append(gid)
+    return fixed, moving
+
+
 def _rotation_to_quat(rotation: np.ndarray) -> np.ndarray:
     quat = np.empty(4, dtype=np.float64)
     mujoco.mju_mat2Quat(quat, np.asarray(rotation, dtype=np.float64).reshape(9))
@@ -120,7 +150,8 @@ def measure_grasp_center(
     wrist_id = model.body(WRIST_ROLL_BODY_NAME).id
     wrist_pos = data.xpos[wrist_id]
     wrist_z = data.xmat[wrist_id].reshape(3, 3)[:, 2]
-    fixed_pos = data.geom_xpos[model.geom(GRIPPER_JAW_GEOM_NAMES[0]).id]
+    fixed_ids, _ = _jaw_geom_ids(model)
+    fixed_pos = data.geom_xpos[fixed_ids].mean(axis=0)
     return wrist_pos + wrist_z * np.dot(fixed_pos - wrist_pos, wrist_z)
 
 
@@ -150,9 +181,10 @@ def measure_grasp_pose(
     data.qpos[joint_ids] = joint_qpos
     mujoco.mj_forward(model, data)
 
-    fixed_id = model.geom(GRIPPER_JAW_GEOM_NAMES[0]).id
-    moving_id = model.geom(GRIPPER_JAW_GEOM_NAMES[1]).id
-    width_vector = data.geom_xpos[moving_id] - data.geom_xpos[fixed_id]
+    fixed_ids, moving_ids = _jaw_geom_ids(model)
+    fixed_pos = data.geom_xpos[fixed_ids].mean(axis=0)
+    moving_pos = data.geom_xpos[moving_ids].mean(axis=0)
+    width_vector = moving_pos - fixed_pos
     width = float(np.linalg.norm(width_vector))
 
     return GraspPose(

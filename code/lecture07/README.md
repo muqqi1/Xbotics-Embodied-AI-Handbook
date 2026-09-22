@@ -58,8 +58,21 @@ python -m unittest discover -s tests -v
 
 ## MuJoCo 资产场景（可选）
 
-场景定义在 `simulation/mujoco_tasks/envs/scene.py`，加载
-`so101_sim` 包里的 `robots/so101_base/so101.urdf`，并在白色桌面上绘制 8 cm × 8 cm 的红色 A 区与蓝色 B 区方框。
+场景定义在 `simulation/mujoco_tasks/envs/scene.py`，加载 `so101_sim` 包里的
+`robots/kit_assets/kit_v1_so101.urdf`（SO-101 真机几何，26 个分解夹爪碰撞体，与 vla/rl 同一套），
+并在白色桌面上绘制 8 cm × 8 cm 的红色 A 区与蓝色 B 区方框。
+
+> **几何版本**：默认用 kit_v1（`mesh_assets.py` 的 `USE_KIT_V1=True`）。so101_sim 在 `ef9c756`
+> 把几何从旧的 `so101_base`（2 个夹爪碰撞体）收敛成 `kit_v1_so101`（26 个分解碰撞体），
+> kit_v1 的夹爪接触更稳，故作为默认。旧 `so101_base` 几何仍 vendored 在
+> `simulation/assets/so101_base/`（gitignored），设 `USE_KIT_V1=False` 可切回；从零复现时执行：
+>
+> ```bash
+> git clone --filter=blob:none --no-checkout https://github.com/Xbotics-Embodied-AI-club/Xbotics-SO101-Sim.git /tmp/so101-sim
+> git -C /tmp/so101-sim checkout 9737e7f -- robots/so101_base
+> cp -r /tmp/so101-sim/robots/so101_base simulation/assets/so101_base
+> rm -f simulation/assets/so101_base/so101.py simulation/assets/so101_base/so101.srdf simulation/assets/so101_base/__init__.py
+> ```
 
 ```bash
 # 完整 pick-place 状态机：cube（90° 翻转双指夹取）/ bottle（水平径向抓取入盒）

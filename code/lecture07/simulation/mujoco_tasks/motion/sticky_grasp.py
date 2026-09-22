@@ -7,7 +7,12 @@ from dataclasses import dataclass
 import mujoco
 import numpy as np
 
-from ..envs.utils.collision import GRIPPER_JAW_COLLISION_GEOM_NAMES, ROBOT_PREFIX
+from ..envs.utils.collision import (
+    GRIPPER_JAW_COLLISION_GEOM_NAMES,
+    ROBOT_PREFIX,
+    USE_KIT_V1,
+    is_robot_collision_only_mesh,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,9 +53,7 @@ class StickyGraspAssist:
         self.contact_steps = contact_steps
         self.min_penetration = min_penetration
         self.release_open_delta_rad = release_open_delta_rad
-        self._jaw_geom_ids = frozenset(
-            model.geom(f"{ROBOT_PREFIX}{name}").id for name in GRIPPER_JAW_COLLISION_GEOM_NAMES
-        )
+        self._jaw_geom_ids = self._collect_jaw_geom_ids(model)
         self._object_geom_ids = tuple(model.geom(name).id for name in self._OBJECT_GEOMS[task])
         free_joint = model.joint(f"{task}_free")
         self._object_qpos_adr = int(free_joint.qposadr[0])
@@ -64,6 +67,33 @@ class StickyGraspAssist:
         self._relative_pos = np.zeros(3, dtype=np.float64)
         self._relative_quat = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
         self._saved_collision: dict[int, tuple[int, int]] = {}
+
+    def _collect_jaw_geom_ids(self, model: mujoco.MjModel) -> frozenset[int]:
+        """Return jaw collision geom ids; for kit_v1 also split fixed/moving sides."""
+
+        if not USE_KIT_V1:
+            ids = frozenset(
+                model.geom(f"{ROBOT_PREFIX}{name}").id for name in GRIPPER_JAW_COLLISION_GEOM_NAMES
+            )
+            self._fixed_jaw_ids = ids
+            self._moving_jaw_ids = ids
+            return ids
+
+        fixed: set[int] = set()
+        moving: set[int] = set()
+        for gid in range(model.ngeom):
+            body = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, model.geom_bodyid[gid]) or ""
+            mid = model.geom_dataid[gid]
+            mname = (mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_MESH, mid) or "") if mid >= 0 else ""
+            if not is_robot_collision_only_mesh(mname):
+                continue
+            if body == f"{ROBOT_PREFIX}gripper_link":
+                fixed.add(gid)
+            elif body == f"{ROBOT_PREFIX}moving_jaw_so101_v1_link":
+                moving.add(gid)
+        self._fixed_jaw_ids = frozenset(fixed)
+        self._moving_jaw_ids = frozenset(moving)
+        return self._fixed_jaw_ids | self._moving_jaw_ids
 
     @property
     def attached(self) -> bool:
@@ -92,7 +122,14 @@ class StickyGraspAssist:
             if float(contact.dist) <= -self.min_penetration
             for jaw_id in self._contact_jaws(contact.geom1, contact.geom2)
         }
-        self._contact_count = self._contact_count + 1 if penetrating_jaws == self._jaw_geom_ids else 0
+        if USE_KIT_V1:
+            both_sides = (
+                bool(penetrating_jaws & self._fixed_jaw_ids)
+                and bool(penetrating_jaws & self._moving_jaw_ids)
+            )
+        else:
+            both_sides = penetrating_jaws == self._jaw_geom_ids
+        self._contact_count = self._contact_count + 1 if both_sides else 0
         if self._contact_count < self.contact_steps:
             return None
 

@@ -7,6 +7,8 @@ from typing import Any
 import mujoco
 import numpy as np
 
+from .mesh_assets import USE_KIT_V1
+
 ROBOT_PREFIX = "so101_"
 
 MANIPULATION_CONTACT_SOLREF = (0.55, 1.0)
@@ -22,6 +24,10 @@ ROBOT_COLLISION_ONLY_MESH_MARKERS = (
     "_convex",
     "Fixed_part_1",
     "Fixed_part_2",
+    # kit_v1 的碰撞体 mesh：Fixed/Moving 是 _erode 版本，固定指另有一组 Wrist_part_*.obj
+    "_erode",
+    "Wrist_part",
+    "Moving_part",
 )
 TASK_OBJECT_GEOMS = frozenset({"cube_geom", "bottle_body_geom", "bottle_neck_geom"})
 GRIPPER_CUBE_CONTACT_SOLREF = (0.06, 1.0)
@@ -141,7 +147,14 @@ def configure_gripper_collision(model: mujoco.MjModel) -> None:
             model.geom_conaffinity[geom_id] = 0
             continue
 
-        if not is_gripper_jaw_collision_geom(geom_name):
+        if USE_KIT_V1:
+            # kit_v1：夹爪碰撞体是 _erode / Wrist_part / Moving_part 这些 mesh，
+            # 视觉 STL 全部关掉；不再依赖两个命名 geom。
+            is_jaw_collision = is_robot_collision_only_mesh(mesh_name)
+        else:
+            is_jaw_collision = is_gripper_jaw_collision_geom(geom_name)
+
+        if not is_jaw_collision:
             model.geom_contype[geom_id] = 0
             model.geom_conaffinity[geom_id] = 0
             continue
@@ -189,6 +202,9 @@ def configure_collision_debug_viewer(viewer: Any, *, enabled: bool = True) -> No
 def name_gripper_collision_geoms(robot_spec: mujoco.MjSpec) -> None:
     """Give jaw collision geoms stable names for contact-pair tuning."""
 
+    if USE_KIT_V1:
+        return  # kit_v1 用 mesh 标记识别碰撞体，不需要命名
+
     for geom in robot_spec.geoms:
         mesh_name = geom.meshname or ""
         geom_name = geom.name or ""
@@ -209,6 +225,9 @@ def _add_gripper_object_contact_pairs(
     margin: float,
 ) -> None:
     """Configure jaw contacts independently from a task object's table contact."""
+
+    if USE_KIT_V1:
+        return  # kit_v1 暂用 configure_gripper_collision 里设的 geom 级接触参数
 
     for jaw_name in GRIPPER_JAW_COLLISION_GEOM_NAMES:
         pair = scene_spec.add_pair()

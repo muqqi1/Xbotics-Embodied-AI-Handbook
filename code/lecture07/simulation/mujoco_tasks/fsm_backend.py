@@ -26,7 +26,7 @@ import numpy as np
 from mujoco_tasks.envs.scene import HOME_QPOS, JOINT_NAMES, TABLE_TOP_Z
 from mujoco_tasks.motion import IKConfig, SO101IKSolver
 from mujoco_tasks.motion.grasp_to_gripper import (
-    GRIPPER_JAW_GEOM_NAMES,
+    _jaw_geom_ids,
     grasp_width_to_gripper_qpos,
 )
 from mujoco_tasks.motion.sticky_grasp import StickyGraspAssist
@@ -105,7 +105,7 @@ class MuJoCoFSMBackend(RobotBackend):
         self._arm_dof_ids = self._joint_dof_ids[:5]
         self._gripper_range = tuple(model.joint(GRIPPER_JOINT).range)
         self._gripper_actuator_id = model.actuator(GRIPPER_ACTUATOR).id
-        self._jaw_ids = tuple(model.geom(name).id for name in GRIPPER_JAW_GEOM_NAMES)
+        self._fixed_jaw_ids, self._moving_jaw_ids = _jaw_geom_ids(model)
 
         info = object_body_info(task)
         self._object_free_joint = info["free_joint"]
@@ -194,12 +194,9 @@ class MuJoCoFSMBackend(RobotBackend):
         )
 
     def _measure_gripper_width(self) -> float:
-        return float(
-            np.linalg.norm(
-                self.data.geom_xpos[self._jaw_ids[0]]
-                - self.data.geom_xpos[self._jaw_ids[1]]
-            )
-        )
+        fixed_pos = self.data.geom_xpos[self._fixed_jaw_ids].mean(axis=0)
+        moving_pos = self.data.geom_xpos[self._moving_jaw_ids].mean(axis=0)
+        return float(np.linalg.norm(moving_pos - fixed_pos))
 
     def _object_pose(self) -> Pose:
         qpos = self.data.qpos[self._free_qpos_adr : self._free_qpos_adr + 7]

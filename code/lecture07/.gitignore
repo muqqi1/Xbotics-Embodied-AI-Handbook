@@ -7,3 +7,6 @@ dist/
 runs/*
 !runs/.gitkeep
 MUJOCO_LOG.TXT
+
+# SO-101 几何（vendored，来自 Xbotics-SO101-Sim commit 9737e7f，见 README「MuJoCo 资产场景」）
+simulation/assets/so101_base/
